@@ -30,7 +30,7 @@ const lastScore = ref(parseInt(localStorage.getItem('last_score')) || 0)
 const history = ref([])
 
 onMounted(() => {
-  history.value = JSON.parse(localStorage.getItem('ranking') || '[]')
+  history.value = JSON.parse(localStorage.getItem('millionaire_scores') || '[]')
 })
 
 const save = () => {
