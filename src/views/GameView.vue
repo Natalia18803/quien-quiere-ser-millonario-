@@ -1,72 +1,70 @@
 <template>
-  <q-layout view="lHh Lpr lFf" class="bg-black">
-    <q-page-container>
-      <q-page class="q-pa-md flex flex-center text-white">
-        <div v-if="currentQuestion" style="width: 100%; max-width: 800px">
+  <q-layout fullscreen class="bg-black">
+    <div v-if="currentQuestion" style="width: 100vw; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center;" class="text-white">
 
-          <div class="text-center q-mb-xl">
-            <q-chip outline color="amber" size="lg">Nivel {{ currentStep + 1 }}: ${{ levels[currentStep] }}</q-chip>
+          <div class="text-center q-mb-xl q-pa-lg">
+            <q-chip outline color="amber" size="xl" class="q-pa-md">Nivel {{ currentStep + 1 }}: ${{ levels[currentStep] }}</q-chip>
+            <q-linear-progress :value="timeLeft / 30" color="red" size="40px" class="q-mt-lg" />
+            <div class="text-h4 q-mt-lg">{{ timeLeft }}s</div>
           </div>
 
-          <div class="row q-col-gutter-sm q-mb-md">
-            <div class="col-4">
+          <div class="row q-col-gutter-lg q-mb-xl">
+            <div class="col-12 col-sm-4">
               <q-btn
                 :disable="!lifelines.fiftyFifty"
                 color="orange"
                 label="50/50"
                 @click="useFiftyFifty"
-                class="full-width"
+                class="full-width q-py-xl q-mb-lg btn-large"
               />
             </div>
-            <div class="col-4">
+            <div class="col-12 col-sm-4">
               <q-btn
                 :disable="!lifelines.audienceHelp"
                 color="green"
                 label="público"
                 @click="useAudienceHelp"
-                class="full-width"
+                class="full-width q-py-xl q-mb-lg btn-large"
               />
             </div>
-            <div class="col-4">
+            <div class="col-12 col-sm-4">
               <q-btn
                 :disable="!lifelines.changeQuestion"
                 color="purple"
                 label="Cambiar"
                 @click="useChangeQuestion"
-                class="full-width"
+                class="full-width q-py-xl q-mb-lg btn-large"
               />
             </div>
           </div>
 
-          <q-card flat bordered class="bg-transparent border-blue q-pa-lg text-center q-mb-xl">
-            <div class="text-h5">{{ currentQuestion.text }}</div>
+          <q-card flat bordered class="bg-transparent border-blue q-pa-xl text-center q-mb-xl">
+            <div class="text-h3 text-sm-h4">{{ currentQuestion.text }}</div>
           </q-card>
 
-          <div class="row q-col-gutter-md">
-            <div v-for="(opt, i) in visibleOptions" :key="i" class="col-12 col-md-6">
-              <q-btn outline color="blue-4" class="full-width q-py-md btn-game" @click="checkAnswer(opt)">
-                <span class="text-amber q-mr-sm">{{ ['A','B','C','D'][i] }}:</span> {{ opt }}
+          <div class="row q-col-gutter-xl">
+            <div v-for="opt in visibleOptions" :key="opt.text" class="col-12 col-sm-6">
+              <q-btn :outline="!showResults" :color="getButtonColor(opt.text)" class="full-width q-py-xl btn-game-large q-mb-lg" :disable="showResults" @click="checkAnswer(opt.text)">
+                <span class="text-amber q-mr-lg text-h5">{{ opt.letter }}:</span> {{ opt.text }}
               </q-btn>
             </div>
           </div>
 
           <!-- Para Ayuda del Público -->
-          <div v-if="audienceVotes" class="q-mb-md">
-            <q-card flat class="bg-grey-9 text-white q-pa-md">
-              <div class="text-h6 q-mb-sm">Ayuda del Público:</div>
-              <div v-for="(vote, i) in audienceVotes" :key="i">
+          <div v-if="audienceVotes" class="q-mb-xl text-center">
+            <q-card flat class="bg-grey-9 text-white q-pa-xl">
+              <div class="text-h4 q-mb-lg">Ayuda del Público:</div>
+              <div v-for="(vote, i) in audienceVotes" :key="i" class="text-h5">
                 {{ ['A','B','C','D'][i] }}: {{ vote }}%
               </div>
             </q-card>
           </div>
         </div>
-      </q-page>
-    </q-page-container>
   </q-layout>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -131,20 +129,34 @@ const questions = [
 const shuffledQuestions = ref([...questions].sort(() => Math.random() - 0.5).slice(0, levels.length))
 
 const currentQuestion = computed(() => shuffledQuestions.value[currentStep.value])
-const visibleOptions = ref([...currentQuestion.value.options])
+const visibleOptions = ref([...currentQuestion.value.options.map((opt, index) => ({ letter: ['A','B','C','D'][index], text: opt }))])
 const audienceVotes = ref(null)
+const timeLeft = ref(30)
+const timerId = ref(null)
+const selectedAnswer = ref(null)
+const showResults = ref(false)
 
 const checkAnswer = (choice) => {
-  if (choice === currentQuestion.value.answer) {
-    if (currentStep.value === questions.length - 1) finish(levels[currentStep.value])
-    else {
-      currentStep.value++
-      visibleOptions.value = [...currentQuestion.value.options]
-      audienceVotes.value = null
+  selectedAnswer.value = choice
+  showResults.value = true
+  // Stop the timer
+  if (timerId.value) clearInterval(timerId.value)
+  // Wait 2 seconds to show results, then proceed
+  setTimeout(() => {
+    if (choice === currentQuestion.value.answer) {
+      if (currentStep.value === shuffledQuestions.value.length - 1) finish(levels[currentStep.value])
+      else {
+        currentStep.value++
+        visibleOptions.value = [...currentQuestion.value.options]
+        audienceVotes.value = null
+        selectedAnswer.value = null
+        showResults.value = false
+        startTimer()
+      }
+    } else {
+      finish(currentStep.value > 0 ? levels[currentStep.value - 1] : 0)
     }
-  } else {
-    finish(currentStep.value > 0 ? levels[currentStep.value - 1] : 0)
-  }
+  }, 2000)
 }
 
 const finish = (prize) => {
@@ -161,11 +173,11 @@ const lifelines = ref({
 const useFiftyFifty = () => {
   if (!lifelines.fiftyFifty) return;
   lifelines.fiftyFifty = false;  // Marcar como usado
-  const correctIndex = visibleOptions.value.indexOf(currentQuestion.value.answer);
-  const incorrectOptions = visibleOptions.value.filter((opt, i) => i !== correctIndex);
+  const incorrectOptions = visibleOptions.value.filter(opt => opt.text !== currentQuestion.value.answer);
   // Eliminar aleatoriamente dos opciones incorrectas
-  const toRemove = incorrectOptions.slice(0, 2);
-  visibleOptions.value = visibleOptions.value.filter(opt => !toRemove.includes(opt));
+  const shuffledIncorrect = [...incorrectOptions].sort(() => Math.random() - 0.5);
+  const toRemove = shuffledIncorrect.slice(0, 2);
+  visibleOptions.value = visibleOptions.value.filter(opt => !toRemove.some(removeOpt => removeOpt.text === opt.text));
 };
 
 const useAudienceHelp = () => {
@@ -177,23 +189,67 @@ const useAudienceHelp = () => {
   audienceVotes.value = votes;
 };
 
+const startTimer = () => {
+  if (timerId.value) clearInterval(timerId.value)
+  timeLeft.value = 30
+  timerId.value = setInterval(() => {
+    timeLeft.value--
+    if (timeLeft.value <= 0) {
+      clearInterval(timerId.value)
+      timeout()
+    }
+  }, 1000)
+}
+
+const timeout = () => {
+  finish(currentStep.value > 0 ? levels[currentStep.value - 1] : 0)
+}
+
 const useChangeQuestion = () => {
   if (!lifelines.changeQuestion) return;
-  lifelines.changeQuestion = false;  // Marcar como usado
-  // Cambiar a la siguiente pregunta disponible
+  lifelines.changeQuestion = false;
   let newIndex;
   do {
-    newIndex = Math.floor(Math.random() * questions.length);
+    newIndex = Math.floor(Math.random() * shuffledQuestions.value.length);
   } while (newIndex === currentStep.value);
   currentStep.value = newIndex;
-  // Reset visible options and audience votes for new question
-  visibleOptions.value = [...currentQuestion.value.options];
+  visibleOptions.value = [...currentQuestion.value.options.map((opt, index) => ({ letter: ['A','B','C','D'][index], text: opt }))]
   audienceVotes.value = null;
+  startTimer()
 };
+
+onMounted(() => {
+  startTimer()
+})
+
+onUnmounted(() => {
+  if (timerId.value) clearInterval(timerId.value)
+})
+
+const getButtonColor = (opt) => {
+  if (!showResults.value) return 'blue-4'
+  if (opt === currentQuestion.value.answer) return 'green'
+  if (opt === selectedAnswer.value) return 'red'
+  return 'blue-4'
+}
+
+watch(currentStep, () => {
+  startTimer()
+})
 
 </script>
 
 <style scoped>
-.border-blue { border: 2px solid #2196f3; border-radius: 40px; }
+.border-blue { border: 4px solid #2196f3; border-radius: 50px; }
 .btn-game { border-radius: 15px; text-transform: none; }
+.btn-large {
+  height: 100px;
+  font-size: 28px;
+  border-radius: 20px;
+}
+.btn-game-large {
+  height: 120px;
+  font-size: 32px;
+  border-radius: 25px;
+}
 </style>
